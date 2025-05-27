@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
+from tensorflow import keras 
 import logging
 import base64
 import json
@@ -8,6 +9,13 @@ import time
 import random
 import threading
 import uuid
+
+###gpt import
+import cv2
+import numpy as np
+from services.deepface_service import analyze_emotion
+from services.gaze_service import get_gaze_direction
+from services.yolo_service import detect_faces
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -82,6 +90,48 @@ def process_frame(session_id, image_data):
     except Exception as e:
         logger.error(f"Error processing frame: {str(e)}")
         return []
+
+## gpt nwe wisper code
+@app.route("/analyze", methods=["POST"])
+def analyze_frame():
+    if "frame" not in request.files:
+        return jsonify({"error": "No frame uploaded"}), 400
+
+    file = request.files["frame"]
+    npimg = np.frombuffer(file.read(), np.uint8)
+    frame = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
+
+    emotion = analyze_emotion(frame)
+    gaze = get_gaze_direction(frame)
+    faces = detect_faces(frame)
+
+    return jsonify({
+        "emotion": emotion,
+        "gaze": gaze,
+        "face_count": faces
+    })
+
+@app.route("/transcribe", methods=["POST"])
+def transcribe_audio():
+    if "audio" not in request.files:
+        return jsonify({"error": "No audio uploaded"}), 400
+
+    file = request.files["audio"]
+    path = f"/tmp/audio.wav"
+    file.save(path)
+
+    from services.whisper_service import transcribe_audio
+    text = transcribe_audio(path)
+    return jsonify({"transcript": text})
+
+##gpt analyse 
+
+
+@app.route('/api/hello', methods=['GET'])
+def hello():
+    return jsonify({"message": "Flask is working!"})
+
+
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
